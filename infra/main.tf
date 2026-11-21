@@ -1,11 +1,6 @@
-﻿resource "random_string" "suffix" {
-  length  = 6
-  upper   = false
-  special = false
-}
-
+﻿
 locals {
-  suffix = random_string.suffix.result
+  suffix = "qpctch"
 }
 
 resource "azurerm_resource_group" "rg" {
