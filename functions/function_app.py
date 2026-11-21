@@ -57,13 +57,12 @@ def analyze_image(content: bytes) -> dict:
     )
     result = client.analyze(
         image_data=content,
-        visual_features=[VisualFeatures.CAPTION, VisualFeatures.TAGS],
+        visual_features=[VisualFeatures.TAGS],
     )
-    caption = result.caption.text if result.caption else ""
     tags = []
     if result.tags:
         tags = [tag.name for tag in result.tags.list if tag.confidence >= 0.6][:10]
-    return {"caption": caption, "tags": tags}
+    return {"tags": tags}
 
 
 @app.blob_trigger(arg_name="blob", path="raw-uploads/{name}", connection="STORAGE_CONNECTION_STRING")
@@ -91,7 +90,6 @@ def process_upload(blob: func.InputStream):
             updates = {
                 "sku": "IMAGE",
                 "status": "processed",
-                "caption": result["caption"],
                 "tags": result["tags"],
                 "extracted_text": "",
             }
