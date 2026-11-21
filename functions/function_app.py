@@ -1,14 +1,19 @@
-﻿import datetime
+import datetime
 import logging
 import os
+import uuid
 
 import azure.functions as func
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
+from azure.ai.vision.imageanalysis import ImageAnalysisClient
+from azure.ai.vision.imageanalysis.models import VisualFeatures
 from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
 
 app = func.FunctionApp()
+
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 
 def now_iso() -> str:
@@ -45,6 +50,22 @@ def analyze(content: bytes) -> dict:
     return {"sku": "UNCLASSIFIED", "text": result.content or ""}
 
 
+def analyze_image(content: bytes) -> dict:
+    client = ImageAnalysisClient(
+        endpoint=os.environ["VISION_ENDPOINT"],
+        credential=AzureKeyCredential(os.environ["VISION_KEY"]),
+    )
+    result = client.analyze(
+        image_data=content,
+        visual_features=[VisualFeatures.CAPTION, VisualFeatures.TAGS],
+    )
+    caption = result.caption.text if result.caption else ""
+    tags = []
+    if result.tags:
+        tags = [tag.name for tag in result.tags.list if tag.confidence >= 0.6][:10]
+    return {"caption": caption, "tags": tags}
+
+
 @app.blob_trigger(arg_name="blob", path="raw-uploads/{name}", connection="STORAGE_CONNECTION_STRING")
 def process_upload(blob: func.InputStream):
     name = blob.name.split("/", 1)[-1]
@@ -65,8 +86,18 @@ def process_upload(blob: func.InputStream):
     doc = found[0]
 
     try:
-        result = analyze(blob.read())
-        updates = {"sku": result["sku"], "status": "processed", "extracted_text": result["text"][:2000]}
+        if name.lower().endswith(IMAGE_EXTENSIONS):
+            result = analyze_image(blob.read())
+            updates = {
+                "sku": "IMAGE",
+                "status": "processed",
+                "caption": result["caption"],
+                "tags": result["tags"],
+                "extracted_text": "",
+            }
+        else:
+            result = analyze(blob.read())
+            updates = {"sku": result["sku"], "status": "processed", "extracted_text": result["text"][:2000]}
     except Exception as error:
         logging.exception("Analysis failed for %s", item_id)
         updates = {"status": "failed", "error": str(error)[:500]}
@@ -79,7 +110,7 @@ def process_upload(blob: func.InputStream):
 
     transactions.create_item(
         {
-            "id": str(__import__("uuid").uuid4()),
+            "id": str(uuid.uuid4()),
             "type": "process",
             "item_id": item_id,
             "status": updates["status"],
