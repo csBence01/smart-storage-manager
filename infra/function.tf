@@ -1,4 +1,4 @@
-﻿resource "azurerm_storage_account" "func_storage" {
+resource "azurerm_storage_account" "func_storage" {
   name                     = "stfunc${local.suffix}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
@@ -38,6 +38,8 @@ resource "azurerm_linux_function_app" "func" {
     "COSMOS_DB"                 = "smartstorage"
     "DOCINT_ENDPOINT"           = azurerm_cognitive_account.docint.endpoint
     "DOCINT_KEY"                = azurerm_cognitive_account.docint.primary_access_key
+    "VISION_ENDPOINT"           = azurerm_cognitive_account.vision.endpoint
+    "VISION_KEY"                = azurerm_cognitive_account.vision.primary_access_key
   }
 }
 
